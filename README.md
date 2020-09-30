@@ -1,2 +1,2 @@
-# simple_market_making
-Simple market making bot
+# Simple market maker
+Simple market maker bot
