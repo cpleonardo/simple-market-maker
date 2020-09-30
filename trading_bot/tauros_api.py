@@ -8,6 +8,7 @@ import bitso
 from decimal import Decimal
 import logging
 from os import environ
+import settings
 
 
 class TaurosPrivate:
@@ -92,15 +93,14 @@ class TaurosPublic():
         }
         return self._request(path=path, params=params)
 
-
-
-tauros_key = environ.get('TAUR_API_KEY')
-tauros_secret = environ.get('TAUR_API_KEY')
+tauros_key = settings.TAUR_API_KEY
+tauros_secret = settings.TAUR_API_SECRET
+is_production = settings.ENVIRONMENT == 'prod'
 
 if not tauros_key or not tauros_secret:
     raise ValueError('Tauros credentials not fund')
 
-tauros = TaurosPrivate(key=tauros_key, secret=tauros_secret, prod=False)
+tauros = TaurosPrivate(key=tauros_key, secret=tauros_secret, prod=is_production)
 
 tauros_public = TaurosPublic(prod=False)
 
