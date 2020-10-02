@@ -102,7 +102,7 @@ if not tauros_key or not tauros_secret:
 
 tauros = TaurosPrivate(key=tauros_key, secret=tauros_secret, prod=is_production)
 
-tauros_public = TaurosPublic(prod=False)
+tauros_public = TaurosPublic(prod=is_production)
 
 bisto_api = bitso.Api()
 
