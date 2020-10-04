@@ -43,8 +43,9 @@ def restart():
     print(f'{orders_closed} limit orders closed!')
 
 def get_order_price(max_price, ref_price):
+    max_price = max_price * Decimal(1 - settings.MIN_SPREAD)
     if ref_price > max_price:
-        return max_price * (1 - settings.MIN_SPREAD)
+        return max_price
     return ref_price + ORDER_PRICE_DELTA
 
 restart()
@@ -109,7 +110,7 @@ while True:
     print("Order successfully placed: ", order_placed)
     print('Sleeping 3 minutes')
 
-    time.sleep(60 * settings.REFRESH_RATE)
+    time.sleep(60 * settings.REFRESH_ORDER_RATE)
 
     close_order = tauros.close_order(order_placed['data']['id'])
     if not close_order['success']:
