@@ -10,6 +10,6 @@ ENVIRONMENT = os.environ.get("ENVIRONMENT")
 TAUR_API_KEY = os.environ.get("TAUR_API_KEY")
 TAUR_API_SECRET = os.environ.get("TAUR_API_SECRET")
 
-REFRESH_ORDER_RATE = 3 # In minutes
+REFRESH_ORDER_RATE = 60 * 3  # In seconds
 
 MIN_SPREAD = 0.009 # means 0.9 %
