@@ -1,5 +1,6 @@
 import bitso
 from trading_bot.tauros_api import TaurosPrivate, TaurosPublic
+from trading_bot import notifications
 from decimal import Decimal
 import logging
 import settings
@@ -135,15 +136,22 @@ def sell_bot():
         btc_wallet = tauros.get_wallet('btc')
 
         if not btc_wallet['success']:
-            print('Tauros available balance failed')
+            print('Tauros BTC wallet query failed')
             time.sleep(3)
             continue
 
         available_btc_balance = Decimal(btc_wallet['data']['balances']['available'])
 
         if available_btc_balance == 0:
-            print('BTC wallet is empty. Imposible to place a sell order.')
-            time.sleep(60*5)
+            print('BTC wallet is empty. Imposible to place a sell order. Sending email. . .')
+            mxn_wallet = tauros.get_wallet('mxn')
+            available_mxn_balance = mxn_wallet['data']['balances']['available']
+            notifications.send_funds_status_email(
+                left_coin_balance=0,
+                right_coin_balance=available_mxn_balance,
+                market='BTC-MXN',
+            )
+            time.sleep(settings.NOT_FUNDS_AWAITING_TIME * 60)
             continue
 
         order_price = get_sell_order_price(
@@ -200,15 +208,22 @@ def buy_bot():
         mxn_wallet = tauros.get_wallet('mxn')
 
         if not mxn_wallet['success']:
-            print('Tauros available balance failed')
+            print('Tauros MXN wallet query failed')
             time.sleep(3)
             continue
 
         available_mxn_balance = Decimal(mxn_wallet['data']['balances']['available'])
 
         if available_mxn_balance == 0:
-            print('MXN wallet is empty. Imposible to place a buy order.')
-            time.sleep(60*5)
+            print('MXN wallet is empty. Imposible to place a buy order. Sending email . . .')
+            btc_wallet = tauros.get_wallet('btc')
+            available_btc_balance = btc_wallet['data']['balances']['available']
+            notifications.send_funds_status_email(
+                left_coin_balance=available_btc_balance,
+                right_coin_balance=0,
+                market='BTC-MXN',
+            )
+            time.sleep(settings.NOT_FUNDS_AWAITING_TIME * 60)
             continue
 
         order_price = get_buy_order_price(
