@@ -18,4 +18,6 @@ REFRESH_ORDER_RATE = 60 * 3  # In seconds
 
 NOT_FUNDS_AWAITING_TIME = 10 # In minutes
 
-MIN_SPREAD = 0.009 # means 0.9 %
+MIN_SPREAD = 0.015 # means 1.5 %
+
+ORDER_PRICE_DELTA = 1 # Order price will be 1 MXN upper/lower than the best one

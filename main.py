@@ -22,8 +22,6 @@ tauros_public = TaurosPublic(prod=is_production)
 
 bisto_api = bitso.Api()
 
-ORDER_PRICE_DELTA = Decimal('1')
-
 def close_all_orders():
     '''
     This function queries all open orders in tauros and closes them.
@@ -32,8 +30,7 @@ def close_all_orders():
     if not open_orders['success']:
         logging.error(f'Querying open orders fail. Error: {open_orders["msg"]}')
         return
-    # Filtering buy orders
-    # buy_open_orders = list(filter(lambda order: order['side'] == 'BUY', open_orders['data']))
+
     orders_ids = [order['order_id']  for order in open_orders['data']]
     logging.info(f'Open orders: {orders_ids}')
     orders_closed = 0
@@ -50,13 +47,28 @@ def get_buy_order_price(max_price, ref_price):
     max_price = max_price * Decimal(1 - settings.MIN_SPREAD)
     if ref_price > max_price:
         return max_price
-    return ref_price + ORDER_PRICE_DELTA
+    return ref_price + settings.ORDER_PRICE_DELTA
 
 def get_sell_order_price(min_price, ref_price):
     min_price = min_price * Decimal(1 + settings.MIN_SPREAD)
     if ref_price < min_price:
         return min_price
-    return ref_price - ORDER_PRICE_DELTA
+    return ref_price - settings.ORDER_PRICE_DELTA
+
+def send_not_enough_balance_notification(left_coin_balance=None, right_coin_balance=None):
+    if right_coin_balance is None:
+        right_coin_wallet = tauros.get_wallet('mxn')
+        right_coin_balance = right_coin_wallet['data']['balances']['available']
+
+    if left_coin_balance is None:
+        left_coin_wallet = tauros.get_wallet('btc')
+        left_coin_balance = left_coin_wallet['data']['balances']['available']
+
+    notifications.send_funds_status_email(
+        left_coin_balance=left_coin_balance,
+        right_coin_balance=right_coin_balance,
+        market='BTC-MXN',
+    )
 
 def get_bitso_bid():
     # Getting bitso order book
@@ -144,13 +156,7 @@ def sell_bot():
 
         if available_btc_balance == 0:
             print('BTC wallet is empty. Imposible to place a sell order. Sending email. . .')
-            mxn_wallet = tauros.get_wallet('mxn')
-            available_mxn_balance = mxn_wallet['data']['balances']['available']
-            notifications.send_funds_status_email(
-                left_coin_balance=0,
-                right_coin_balance=available_mxn_balance,
-                market='BTC-MXN',
-            )
+            send_not_enough_balance_notification(left_coin_balance=0)
             time.sleep(settings.NOT_FUNDS_AWAITING_TIME * 60)
             continue
 
@@ -216,13 +222,7 @@ def buy_bot():
 
         if available_mxn_balance == 0:
             print('MXN wallet is empty. Imposible to place a buy order. Sending email . . .')
-            btc_wallet = tauros.get_wallet('btc')
-            available_btc_balance = btc_wallet['data']['balances']['available']
-            notifications.send_funds_status_email(
-                left_coin_balance=available_btc_balance,
-                right_coin_balance=0,
-                market='BTC-MXN',
-            )
+            send_not_enough_balance_notification(right_coin_balance=0)
             time.sleep(settings.NOT_FUNDS_AWAITING_TIME * 60)
             continue
 
@@ -250,6 +250,13 @@ def buy_bot():
 
         if not order_placed['success']:
             print('Could not place buy order. Error: ', order_placed['msg'])
+            message = 'The minimum order'
+            try:
+                if message in order_placed['msg'][0]:
+                    send_not_enough_balance_notification()
+                    time.sleep(settings.NOT_FUNDS_AWAITING_TIME * 60)
+            except:
+                pass
             continue
 
         order_id = order_placed['data']['id']
