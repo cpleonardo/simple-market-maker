@@ -4,6 +4,7 @@ import time
 import hmac
 import hashlib
 import base64
+import simplejson
 
 
 class TaurosPrivate:
@@ -36,13 +37,19 @@ class TaurosPrivate:
             'Taur-Nonce': nonce,
             'Content-Type': 'application/json',
         }
-        return requests.request(
-            method=method,
-            url=self.base_url+path,
-            data=json.dumps(data),
-            params=query_params,
-            headers=headers,
-        ).json()
+        try:
+            return requests.request(
+                method=method,
+                url=self.base_url+path,
+                data=json.dumps(data),
+                params=query_params,
+                headers=headers,
+            ).json()
+        except simplejson.errors.JSONDecodeError:
+            return {
+                'success': False,
+                'msg': 'Could not connect to api.tauros.io'
+            }
 
     def place_order(self, order):
         path = '/api/v1/trading/placeorder/'
