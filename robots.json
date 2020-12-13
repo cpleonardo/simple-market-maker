@@ -1,0 +1,14 @@
+[
+    {
+        "market": "btc-mxn",
+        "side": "buy",
+        "spread": 0.0,
+        "max_value": 20000
+    },
+    {
+        "market": "btc-mxn",
+        "side": "sell",
+        "spread": 0.015,
+        "max_value": 20000
+    }
+]

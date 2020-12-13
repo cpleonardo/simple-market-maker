@@ -83,10 +83,16 @@ class TaurosPublic():
         self.base_url = 'https://api.tauros.io/api' if prod else 'https://api.staging.tauros.io/api'
 
     def _request(self, path, params={}):
-        return requests.get(
-            url=self.base_url+path,
-            params=params,
-        ).json()
+        try:
+            return requests.get(
+                url=self.base_url+path,
+                params=params,
+            ).json()
+        except simplejson.errors.JSONDecodeError:
+            return {
+                'success': False,
+                'msg': 'Could not connect to api.tauros.io'
+            }
 
     def get_order_book(self, market='BTC-MXN'):
         path = '/v1/trading/orders/'
