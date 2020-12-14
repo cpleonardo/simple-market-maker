@@ -2,6 +2,7 @@ import bitso
 from trading_bot.tauros_api import TaurosPrivate, TaurosPublic
 from trading_bot import notifications
 from decimal import Decimal
+import requests
 import logging
 import settings
 import time
@@ -28,7 +29,7 @@ def close_all_orders():
     '''
     This function queries all open orders in tauros and closes them.
     '''
-    open_orders = tauros.get_orders(market='btc-mxn')
+    open_orders = tauros.get_orders()
     if not open_orders['success']:
         logging.error(f'Querying open orders fail. Error: {open_orders["msg"]}')
         return
@@ -48,7 +49,7 @@ def close_all_orders():
 def get_buy_order_price(max_price, ref_price, spread=None):
     if spread is None:
         spread =  settings.MIN_SPREAD
-    max_price = max_price * Decimal(1 - spread)
+    max_price = max_price * Decimal(1 - spread / 100)
     if ref_price > max_price:
         return max_price
     return ref_price + settings.ORDER_PRICE_DELTA
@@ -56,7 +57,7 @@ def get_buy_order_price(max_price, ref_price, spread=None):
 def get_sell_order_price(min_price, ref_price, spread=None):
     if spread is None:
         spread =  settings.MIN_SPREAD
-    min_price = min_price * Decimal(1 + spread)
+    min_price = min_price * Decimal(1 + spread / 100)
     if ref_price < min_price:
         return min_price
     return ref_price - settings.ORDER_PRICE_DELTA
@@ -137,12 +138,19 @@ def get_order_value(max_balance, price, side='buy'):
 
     return order_value
 
-def sell_bot(config):
-    market = config['market']
-    spread = config['spread']
-    left_coin, right_coin = market.split('-')
-
+def sell_bot(config_id, remote=False):
+    config = {}
     while True:
+        if remote:
+            response = requests.get(f'https://{settings.FIREBASE_PROJECT_ID}.firebaseio.com/{config_id}.json')
+            config = response.json()
+        else:
+            with open('./robots.json') as robots:
+                robots_list = json.load(robots)
+                config = robots_list[config_id]
+        market = config['market']
+        spread = config['spread']
+        left_coin, right_coin = market.split('-')
         bitso_price = get_bitso_ask(market=market)
         tauros_price = get_tauros_ask(market=market)
 
@@ -193,7 +201,10 @@ def sell_bot(config):
         order_placed = tauros.place_order(order=order)
 
         if not order_placed['success']:
-            logging.error(f"Could not place sell order in {market} market. Error: {order_placed['msg']}")
+            print('=======================================================')
+            error_msg = f"Could not place sell order in {market} market. Error: {order_placed['msg']}"
+            logging.error(error_msg)
+            print(error_msg)
             messages = (
                 'The minimum order',
                 'has not enough {}'.format(left_coin.upper()),
@@ -211,7 +222,7 @@ def sell_bot(config):
 
         order_id = order_placed['data']['id']
 
-        time_to_sleep = settings.REFRESH_ORDER_RATE
+        time_to_sleep = config.get('refresh_rate') * 60 or settings.REFRESH_ORDER_RATE
         print('=======================================================')
         print("Market: ", market)
         print('Side: SELL')
@@ -222,9 +233,9 @@ def sell_bot(config):
         real_spread = (bitso_price - Decimal(order_data['price'])) / bitso_price
         real_spread = abs(round(real_spread * 100, 2))
         print(
-            f"Price: {order_data['price']} | Spread: {real_spread}% | Amount: {order_data['amount']} | Value: {order_data['value']}"
+            f"DT: {order_data['created_at']} | Price: {order_data['price']} | Spread: {real_spread}% | Amount: {order_data['amount']} | Value: {order_data['value']}"
         )
-
+        print(f"Sleeping {time_to_sleep} seconds")
         time.sleep(time_to_sleep)
 
         close_order = tauros.close_order(order_id)
@@ -233,12 +244,23 @@ def sell_bot(config):
             close_all_orders()
 
 
-def buy_bot(config):
-    market = config['market']
-    spread = config['spread']
-    left_coin, right_coin = market.split('-')
-
+def buy_bot(config_id, remote=False):
+    config = {}
     while True:
+        if remote:
+            response = requests.get(f'https://{settings.FIREBASE_PROJECT_ID}.firebaseio.com/{config_id}.json')
+            config = response.json()
+            if not config:
+                print("==================================================")
+                print("Imposible to place order. Could get confi from firebase. Error:", respose.text)
+                return
+        else:
+            with open('./robots.json') as robots:
+                robots_list = json.load(robots)
+                config = robots_list[config_id]
+        market = config['market']
+        spread = config['spread']
+        left_coin, right_coin = market.split('-')
         bitso_price = get_bitso_bid(market=market)
         tauros_price = get_tauros_bid(market=market)
 
@@ -260,6 +282,7 @@ def buy_bot(config):
         )
 
         if right_coin_balance == 0:
+            print('=======================================================')
             logging.error(f'{right_coin} wallet is empty. Imposible to place a buy order. Sending email . . .')
             send_not_enough_balance_notification(right_coin_balance=0)
             time.sleep(settings.NOT_FUNDS_AWAITING_TIME * 60)
@@ -289,7 +312,10 @@ def buy_bot(config):
         order_placed = tauros.place_order(order=order)
 
         if not order_placed['success']:
-            logging.error(f"Could not place buy order in {market} market. Error: {order_placed['msg']}")
+            print('=======================================================')
+            error_msg = f"Could not place buy order in {market} market. Error: {order_placed['msg']}"
+            logging.error(error_msg)
+            print(error_msg)
             messages = (
                 'The minimum order',
                 'has not enough {}'.format(right_coin.upper()),
@@ -307,7 +333,7 @@ def buy_bot(config):
 
         order_id = order_placed['data']['id']
 
-        time_to_sleep = settings.REFRESH_ORDER_RATE
+        time_to_sleep = config.get('refresh_rate') * 60 or settings.REFRESH_ORDER_RATE
         print('=======================================================')
         print("Market: ", market)
         print('Side: BUY')
@@ -318,8 +344,9 @@ def buy_bot(config):
         real_spread = (bitso_price - Decimal(order_data['price'])) / bitso_price
         real_spread = abs(round(real_spread * 100, 2))
         print(
-            f"Price: {order_data['price']} | Spread: {real_spread}% | Amount: {order_data['amount']} | Value: {order_data['value']}"
+            f"DT: {order_data['created_at']} | Price: {order_data['price']} | Spread: {real_spread}% | Amount: {order_data['amount']} | Value: {order_data['value']}"
         )
+        print(f"Sleeping {time_to_sleep} seconds")
         time.sleep(time_to_sleep)
 
         close_order = tauros.close_order(order_id)
@@ -329,24 +356,39 @@ def buy_bot(config):
 
 
 if __name__ == '__main__':
+    print("Environment: ", "PRODUCTION" if is_production else "STAGING")
+
     close_all_orders()
     from multiprocessing import Process
-    with open('./robots.json') as robots:
-        robots_list = json.load(robots)
-        processes = []
-        for robot in robots_list:
-            processes.append(
-                Process(
-                    target=buy_bot if robot['side'] == 'buy' else sell_bot,
-                    args=(robot,)
-                )
+    processes = []
+    # with open('./robots.json') as robots:
+    #     robots_list = json.load(robots)
+    #     for robot in robots_list:
+    #         processes.append(
+    #             Process(
+    #                 target=buy_bot if robot['side'] == 'buy' else sell_bot,
+    #                 args=(robot,)
+    #             )
+    #         )
+
+    for i in range(0, 50):
+        response = requests.get(f'https://{settings.FIREBASE_PROJECT_ID}.firebaseio.com/{i}.json')
+        robot = response.json()
+        if robot is None:
+            break;
+        processes.append(
+            Process(
+                target=buy_bot if robot['side'] == 'buy' else sell_bot,
+                args=(i,True)
             )
-        try:
-            for process in processes:
-                process.start()
-            for process in processes:
-                process.join()
-        except KeyboardInterrupt:
-            close_all_orders()
-            for process in processes:
-                process.terminate()
+        )
+
+    try:
+        for process in processes:
+            process.start()
+        for process in processes:
+            process.join()
+    except KeyboardInterrupt:
+        close_all_orders()
+        for process in processes:
+            process.terminate()

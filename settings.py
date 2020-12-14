@@ -21,3 +21,5 @@ NOT_FUNDS_AWAITING_TIME = 10 # In minutes
 MIN_SPREAD = 0.015 # means 1.5 %
 
 ORDER_PRICE_DELTA = 1 # Order price will be 1 MXN upper/lower than the best one
+
+FIREBASE_PROJECT_ID=os.environ.get("FIREBASE_PROJECT_ID")
