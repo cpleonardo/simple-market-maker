@@ -121,9 +121,9 @@ def get_tauros_ask(market='btc-mxn'):
             return tauros_price
 
 
-def get_order_value(max_balance, price, side='buy'):
+def get_order_value(max_balance, price, max_order_value=200_00.00, side='buy'):
     # Setting order value
-    MAX_ORDER_VALUE = Decimal('20000.00')
+    MAX_ORDER_VALUE = Decimal(str(max_order_value))
 
     if side == 'buy':
         if max_balance > MAX_ORDER_VALUE:
@@ -186,6 +186,7 @@ def sell_bot(config_id, remote=False):
         order_value = get_order_value(
             max_balance=left_coin_balance,
             price=order_price,
+            max_order_value=config.get('order_value') or 20_000.00,
             side='sell'
         )
 
@@ -297,6 +298,7 @@ def buy_bot(config_id, remote=False):
         order_value = get_order_value(
             max_balance=right_coin_balance,
             price=order_price,
+            max_order_value=config.get('order_value') or 20_000.00,
             side='buy'
         )
 
