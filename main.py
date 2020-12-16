@@ -150,6 +150,13 @@ def sell_bot(config_id, remote=False):
                 config = robots_list[config_id]
         market = config['market']
         spread = config['spread']
+        time_to_sleep = config.get('refresh_rate') * 60 or settings.REFRESH_ORDER_RATE
+
+        if not config.get('is_active'):
+            print(f"{market} bot is not active. Sleeping {time_to_sleep} seconds")
+            time.sleep(time_to_sleep)
+            continue
+
         left_coin, right_coin = market.split('-')
         bitso_price = get_bitso_ask(market=market)
         tauros_price = get_tauros_ask(market=market)
@@ -261,6 +268,13 @@ def buy_bot(config_id, remote=False):
                 config = robots_list[config_id]
         market = config['market']
         spread = config['spread']
+        time_to_sleep = config.get('refresh_rate') * 60 or settings.REFRESH_ORDER_RATE
+
+        if not config.get('is_active'):
+            print(f"{market} bot is not active. Sleeping {time_to_sleep} seconds")
+            time.sleep(time_to_sleep)
+            continue
+
         left_coin, right_coin = market.split('-')
         bitso_price = get_bitso_bid(market=market)
         tauros_price = get_tauros_bid(market=market)
@@ -335,7 +349,6 @@ def buy_bot(config_id, remote=False):
 
         order_id = order_placed['data']['id']
 
-        time_to_sleep = config.get('refresh_rate') * 60 or settings.REFRESH_ORDER_RATE
         print('=======================================================')
         print("Market: ", market)
         print('Side: BUY')
