@@ -376,15 +376,6 @@ if __name__ == '__main__':
     close_all_orders()
     from multiprocessing import Process
     processes = []
-    # with open('./robots.json') as robots:
-    #     robots_list = json.load(robots)
-    #     for robot in robots_list:
-    #         processes.append(
-    #             Process(
-    #                 target=buy_bot if robot['side'] == 'buy' else sell_bot,
-    #                 args=(robot,)
-    #             )
-    #         )
 
     for i in range(0, 50):
         response = requests.get(f'https://{settings.FIREBASE_PROJECT_ID}.firebaseio.com/{i}.json')
@@ -400,6 +391,7 @@ if __name__ == '__main__':
 
     try:
         for process in processes:
+            time.sleep(0.1)
             process.start()
         for process in processes:
             process.join()
