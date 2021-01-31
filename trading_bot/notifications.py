@@ -15,6 +15,8 @@ def send_email(message):
         )
 
 def send_funds_status_email(left_coin_balance, right_coin_balance, market):
+    if not settings.NOTIFICATIONS_ENABLED:
+        return
     left_coin, right_coin = market.split('-')
     msg = EmailMessage()
     msg.set_content(
