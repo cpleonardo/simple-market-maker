@@ -11,7 +11,7 @@ Working parameters:
 
 
 Trading related parameters:
-* `market`: Market to place the order (e.g. BTC-MXN)
+* `market`: Market to place the order (BTC-MXN, LTC-MXN and BCH-MXN are by now allowed)
 * `spread`: The minimum spread to take in consideration for order placement (e.g. 3%). Nevative values are allwed.
 * `order_vale`: The maximum value that the order can have (e.g. $10,000.00 MXN)
 * `side`: Order side (buy or sell)
@@ -25,10 +25,10 @@ Rule 1:
 Allways look for 1st position in order book
 
 Rule 2:
-Increase spread as much as posible until 1st order book positition allows
+Increase spread as much as posible trying to keep first position in order book
 
 Rule 3:
-Never put an order bellow configured spread
+Never place an order bellow configured spread
 
 Rule 4:
 Use the maximum available funds but never surpase configured order value.
