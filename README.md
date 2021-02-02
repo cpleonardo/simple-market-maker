@@ -12,8 +12,8 @@ Working parameters:
 
 Trading related parameters:
 * `market`: Market to place the order (BTC-MXN, LTC-MXN and BCH-MXN are by now allowed)
-* `spread`: The minimum spread to take in consideration for order placement (e.g. 3%). Nevative values are allwed.
-* `order_vale`: The maximum value that the order can have (e.g. $10,000.00 MXN)
+* `spread`: The minimum spread to take in consideration for order placement (e.g. 3%). Negative values are allowed.
+* `order_value`: The maximum value that the order can have (e.g. $10,000.00 MXN)
 * `side`: Order side (buy or sell)
 
 This parameters can be confirgued locally in the file `robots.json` or in a remote firebase realtime database. View `settings.py` file.
@@ -67,3 +67,11 @@ Do not forget to configure your bots using the `robots.json` file or in your fir
 
 ## Email notificacions
 If some of your wallets runs out of funds, an email can be sent to notice you. You can follow this [tutorial](https://realpython.com/python-send-email/) for creating a dedicated gmail account.
+
+
+## Docker
+### Create the image
+  docker image build --tag tauros-bot .
+
+### Run the container
+  docker container run --env-file ./.env tauros-bot
