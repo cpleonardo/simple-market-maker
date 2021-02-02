@@ -71,7 +71,7 @@ If some of your wallets runs out of funds, an email can be sent to notice you. Y
 
 ## Docker
 ### Create the image
-  docker image build --tag tauros-bot .
+    docker image build --tag tauros-bot .
 
 ### Run the container
-  docker container run --env-file ./.env tauros-bot
+    docker container run --env-file ./.env tauros-bot
