@@ -378,17 +378,25 @@ if __name__ == '__main__':
     processes = []
 
     for i in range(0, 50):
-        response = requests.get(f'https://{settings.FIREBASE_PROJECT_ID}.firebaseio.com/{i}.json')
-        robot = response.json()
+        if settings.USE_FIREBASE:
+            print('Using firebase...')
+            response = requests.get(f'https://{settings.FIREBASE_PROJECT_ID}.firebaseio.com/{i}.json')
+            robot = response.json()
+        else:
+            print('Using robots.json file...')
+            with open('./robots.json') as bots_config:
+                try:
+                    robot = json.load(bots_config)[i]
+                except IndexError:
+                    break
         if robot is None:
-            break;
+            break
         processes.append(
             Process(
                 target=buy_bot if robot['side'] == 'buy' else sell_bot,
-                args=(i,True)
+                args=(i,settings.USE_FIREBASE)
             )
         )
-
     try:
         for process in processes:
             time.sleep(0.1)
