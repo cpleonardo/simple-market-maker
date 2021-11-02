@@ -11,7 +11,7 @@ Working parameters:
 
 
 Trading related parameters:
-* `market`: Market to place the order (BTC-MXN, LTC-MXN and BCH-MXN are by now allowed)
+* `market`: Market to place the order (BTC-MXN, LTC-MXN, BCH-MXN and ETH-MXN are by now allowed)
 * `spread`: The minimum spread to take in consideration for order placement (e.g. 3%). Negative values are allowed.
 * `order_value`: The maximum value that the order can have (e.g. $10,000.00 MXN)
 * `side`: Order side (buy or sell)
