@@ -105,7 +105,7 @@ def get_tauros_bid(market='btc-mxn'):
     # Getting tauros order book
     tauros_order_book = tauros_public.get_order_book(market=market)
     tauros_price = None
-    for bid in tauros_order_book['data']['bids']:
+    for bid in tauros_order_book['payload']['bids']:
         if Decimal(str(bid['value'])) > Decimal('200.00'):
             tauros_price = Decimal(str(bid['price']))
             return tauros_price
@@ -115,7 +115,7 @@ def get_tauros_ask(market='btc-mxn'):
     # Getting tauros order book
     tauros_order_book = tauros_public.get_order_book(market=market)
     tauros_price = None
-    for ask in tauros_order_book['data']['asks']:
+    for ask in tauros_order_book['payload']['asks']:
         if Decimal(str(ask['value'])) > Decimal('200.00'):
             tauros_price = Decimal(str(ask['price']))
             return tauros_price

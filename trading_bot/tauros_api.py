@@ -95,9 +95,6 @@ class TaurosPublic():
             }
 
     def get_order_book(self, market='BTC-MXN'):
-        path = '/v1/trading/orders/'
-        params = {
-            'market': market
-        }
-        return self._request(path=path, params=params)
+        path = f'/v2/trading/{market}/orderbook/'
+        return self._request(path=path)
 
