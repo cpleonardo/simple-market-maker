@@ -13,7 +13,7 @@ Working parameters:
 Trading related parameters:
 * `market`: Market to place the order (BTC-MXN, LTC-MXN, BCH-MXN and ETH-MXN are by now allowed)
 * `spread`: The minimum spread to take in consideration for order placement (e.g. 3%). Negative values are allowed.
-* `greedy_mode`: If enabled, maximizes spread as much as possible. Default is `true`. 
+* `greedy_mood`: If enabled, maximizes spread as much as possible. Default is `true`. 
 * `order_value`: The maximum value that the order can have (e.g. $10,000.00 MXN)
 * `side`: Order side (buy or sell)
 
@@ -26,7 +26,7 @@ Rule 1:
 Allways look for 1st position in order book
 
 Rule 2:
-Increase spread as much as posible trying to keep first position in order book. (Only if `greedy_mode` enabled)
+Increase spread as much as posible trying to keep first position in order book. (Only if `greedy_mood` enabled)
 
 Rule 3:
 Never place an order bellow configured spread
