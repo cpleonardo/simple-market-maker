@@ -1,4 +1,5 @@
 import requests
+import logging
 import json
 import time
 import hmac
@@ -74,6 +75,28 @@ class TaurosPrivate:
             "coin": coin,
         }
         return self._request(path=path, query_params=data, method="get")
+    
+    def close_all_orders(self):
+        """
+        This function queries all open orders in tauros and closes them.
+        """
+        open_orders = self.get_orders()
+        if not open_orders["success"]:
+            logging.error(f'Querying open orders fail. Error: {open_orders["msg"]}')
+            return
+
+        orders_ids = [order["order_id"] for order in open_orders["data"]]
+        logging.info(f"Open orders: {orders_ids}")
+        orders_closed = 0
+        for order_id in orders_ids:
+            logging.info(f"Closing order with id: {order_id}")
+            close_order = self.close_order(order_id=order_id)
+            if not close_order["success"]:
+                error_msg = close_order["msg"]
+                logging.error(f"Close order with id {order_id} failed. Error: {error_msg}")
+                continue
+            orders_closed += 1
+        logging.info(f"{orders_closed} limit orders closed!")
 
 
 class TaurosPublic:
