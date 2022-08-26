@@ -19,20 +19,38 @@
     },
     {
         "is_active": true,
-        "market": "btc-usdc",
-        "order_value": 20,
-        "refresh_rate": 0.1,
+        "market": "ltc-mxn",
+        "order_value": 2200,
+        "refresh_rate": 3,
         "side": "buy",
         "spread": 1.5,
         "greedy_mood": false
     },
     {
         "is_active": true,
-        "market": "btc-usdc",
-        "order_value": 20,
-        "refresh_rate": 0.1,
+        "market": "ltc-mxn",
+        "order_value": 2300,
+        "refresh_rate": 3,
         "side": "sell",
-        "spread": 1.5,
+        "spread": 0.5,
+        "greedy_mood": false
+    },
+    {
+        "is_active": true,
+        "market": "bch-mxn",
+        "order_value": 1222,
+        "refresh_rate": 3,
+        "side": "buy",
+        "spread": 0.5,
+        "greedy_mood": false
+    },
+    {
+        "is_active": true,
+        "market": "bch-mxn",
+        "order_value": 1111,
+        "refresh_rate": 3,
+        "side": "sell",
+        "spread": 0.7,
         "greedy_mood": false
     }
 ]

@@ -1,5 +1,5 @@
 from trading_bot.tauros_api import TaurosPrivate, TaurosPublic
-from trading_bot import notifications, bitso_client
+from trading_bot import notifications, price_source
 from decimal import Decimal
 import requests
 import logging
@@ -23,27 +23,7 @@ tauros = TaurosPrivate(key=tauros_key, secret=tauros_secret, prod=is_production)
 tauros_public = TaurosPublic(prod=is_production)
 
 
-def get_buy_order_price(max_price, ref_price, spread=None, greedy_mood=True):
-    if spread is None:
-        spread = settings.MIN_SPREAD
-    max_price = max_price * Decimal(1 - spread / 100)
-    if ref_price > max_price or not greedy_mood:
-        return max_price
-    return ref_price + settings.ORDER_PRICE_DELTA
-
-
-def get_sell_order_price(min_price, ref_price, spread=None, greedy_mood=True):
-    if spread is None:
-        spread = settings.MIN_SPREAD
-    min_price = min_price * Decimal(1 + spread / 100)
-    if ref_price < min_price or not greedy_mood:
-        return min_price
-    return ref_price - settings.ORDER_PRICE_DELTA
-
-
-def notify_not_enough_balance(
-    left_coin_balance=None, right_coin_balance=None
-):
+def notify_not_enough_balance(left_coin_balance=None, right_coin_balance=None):
     if right_coin_balance is None:
         right_coin_wallet = tauros.get_wallet("mxn")
         right_coin_balance = right_coin_wallet["data"]["balances"]["available"]
@@ -57,24 +37,6 @@ def notify_not_enough_balance(
         right_coin_balance=right_coin_balance,
         market="BTC-MXN",
     )
-
-
-def get_order_value(max_balance, price, max_order_value=20_000.00, side="buy"):
-    # Setting order value
-    MAX_ORDER_VALUE = Decimal(str(max_order_value))
-
-    if side == "buy":
-        if max_balance > MAX_ORDER_VALUE:
-            return MAX_ORDER_VALUE
-        else:
-            return max_balance
-
-    order_value = max_balance * price
-
-    if order_value > MAX_ORDER_VALUE:
-        return MAX_ORDER_VALUE
-
-    return order_value
 
 
 def sell_bot(config_id, remote=False):
@@ -100,10 +62,10 @@ def sell_bot(config_id, remote=False):
             continue
 
         left_coin, _ = market.split("-")
-        bitso_price = bitso_client.get_ask_price(market=market)
+        external_price = price_source.get_external_price(market=market, ask=True)
         tauros_price = tauros_public.get_ask_price(market=market)
 
-        if not bitso_price or not tauros_price:
+        if not external_price or not tauros_price:
             logging.error("Bitso or Tauros query price failed")
             time.sleep(3)
             continue
@@ -126,19 +88,21 @@ def sell_bot(config_id, remote=False):
             time.sleep(settings.NOT_FUNDS_AWAITING_TIME * 60)
             continue
 
-        order_price = get_sell_order_price(
-            min_price=bitso_price,
+        order_price = price_source.get_sell_order_price(
+            min_price=external_price,
             ref_price=tauros_price,
             spread=spread,
             greedy_mood=greedy_mood,
         )
         if not greedy_mood:
-            tauros_bid_price = tauros_public.get_bid_price(market=market, ignore_below=0)
+            tauros_bid_price = tauros_public.get_bid_price(
+                market=market, ignore_below=0
+            )
             if order_price <= tauros_bid_price:
                 # TODO: Remove magic number
-                order_price = tauros_bid_price + Decimal('0.01')
+                order_price = tauros_bid_price + Decimal("0.01")
 
-        order_value = get_order_value(
+        order_value = price_source.get_order_value(
             max_balance=left_coin_balance,
             price=order_price,
             max_order_value=config.get("order_value") or 20_000.00,
@@ -157,7 +121,9 @@ def sell_bot(config_id, remote=False):
         order_placed = tauros.place_order(order=order)
 
         if not order_placed["success"]:
-            logging.error(f"Could not place sell order in {market} market. Error: {order_placed['msg']}")
+            logging.error(
+                f"Could not place sell order in {market} market. Error: {order_placed['msg']}"
+            )
             messages = (
                 "The minimum order",
                 "has not enough {}".format(left_coin.upper()),
@@ -177,13 +143,12 @@ def sell_bot(config_id, remote=False):
 
         time_to_sleep = config.get("refresh_rate") * 60 or settings.REFRESH_ORDER_RATE
 
-        logging.info(f"Market: {market}")
-        logging.info("Side: SELL")
+        logging.info(f"Market: {market}. Side: SELL")
         logging.info(f"Tauros ask order price: {tauros_price}")
-        logging.info(f"Bitso ask order price: {bitso_price}")
+        logging.info(f"External ask order price: {external_price}")
         logging.info("Sell order successfully placed: ")
         order_data = order_placed["data"]
-        real_spread = (bitso_price - Decimal(order_data["price"])) / bitso_price
+        real_spread = (external_price - Decimal(order_data["price"])) / external_price
         real_spread = abs(round(real_spread * 100, 2))
         order_data["spread"] = str(real_spread) + "%"
         logging.info(order_data)
@@ -194,7 +159,8 @@ def sell_bot(config_id, remote=False):
         if not close_order["success"]:
             logging.info(f"Order close faild. Error: {close_order['msg']}")
             # Making a second attempt if nonce invalid
-            if "Provided nonce it is not valid." == close_order['msg']:
+            if "Provided nonce it is not valid." == close_order["msg"]:
+                logging.info("Making a sencond attempt")
                 close_order = tauros.close_order(order_id)
 
 
@@ -227,13 +193,13 @@ def buy_bot(config_id, remote=False):
             continue
 
         _, right_coin = market.split("-")
-        bitso_price = bitso_client.get_bid_price(market=market)
+        external_price = price_source.get_external_price(market=market, ask=False)
         tauros_price = tauros_public.get_bid_price(market=market)
 
-        if not bitso_price or not tauros_price:
+        if not external_price or not tauros_price:
             TRY_AGAIN_IN = 3
             logging.error(
-                f"Bitso or Tauros query price failed. Trying again in: {TRY_AGAIN_IN}s"
+                f"External or Tauros query price failed for BUY bot in {market}. Trying again in: {TRY_AGAIN_IN}s"
             )
             time.sleep(TRY_AGAIN_IN)
             continue
@@ -242,7 +208,9 @@ def buy_bot(config_id, remote=False):
 
         if not right_coin_wallet["success"]:
             error_msg = right_coin_wallet["msg"]
-            logging.error(f"Tauros {right_coin} wallet query failed. Error: {error_msg}")
+            logging.error(
+                f"Tauros {right_coin} wallet query failed. Error: {error_msg}"
+            )
             time.sleep(3)
             continue
 
@@ -256,19 +224,21 @@ def buy_bot(config_id, remote=False):
             time.sleep(settings.NOT_FUNDS_AWAITING_TIME * 60)
             continue
 
-        order_price = get_buy_order_price(
-            max_price=bitso_price,
+        order_price = price_source.get_buy_order_price(
+            max_price=external_price,
             ref_price=tauros_price,
             spread=spread,
             greedy_mood=greedy_mood,
         )
         if not greedy_mood:
-            tauros_ask_price = tauros_public.get_ask_price(market=market, ignore_below=0)
+            tauros_ask_price = tauros_public.get_ask_price(
+                market=market, ignore_below=0
+            )
             if order_price >= tauros_ask_price:
                 # TODO: Remove magic number
-                order_price = tauros_ask_price - Decimal('0.01')
+                order_price = tauros_ask_price - Decimal("0.01")
 
-        order_value = get_order_value(
+        order_value = price_source.get_order_value(
             max_balance=right_coin_balance,
             price=order_price,
             max_order_value=config.get("order_value") or 20_000.00,
@@ -306,13 +276,12 @@ def buy_bot(config_id, remote=False):
 
         order_id = order_placed["data"]["id"]
 
-        logging.info(f"Market: {market}")
-        logging.info("Side: BUY")
+        logging.info(f"Market: {market}. Side: BUY")
         logging.info(f"Tauros bid order price: {tauros_price}")
-        logging.info(f"Bitso bid order price: {bitso_price}")
+        logging.info(f"External bid order price: {external_price}")
         logging.info("Buy order successfully placed: ")
         order_data = order_placed["data"]
-        real_spread = (bitso_price - Decimal(order_data["price"])) / bitso_price
+        real_spread = (external_price - Decimal(order_data["price"])) / external_price
         real_spread = abs(round(real_spread * 100, 2))
         order_data["spread"] = str(real_spread) + "%"
         logging.info(order_data)
@@ -323,7 +292,8 @@ def buy_bot(config_id, remote=False):
         if not close_order["success"]:
             logging.info(f"Order close faild. Error: {close_order['msg']}")
             # Making a second attempt if nonce invalid
-            if "Provided nonce it is not valid." == close_order['msg']:
+            if "Provided nonce it is not valid." == close_order["msg"]:
+                logging.info("Making a sencond attempt")
                 close_order = tauros.close_order(order_id)
 
 
