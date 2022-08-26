@@ -75,7 +75,7 @@ class TaurosPrivate:
             "coin": coin,
         }
         return self._request(path=path, query_params=data, method="get")
-    
+
     def close_all_orders(self):
         """
         This function queries all open orders in tauros and closes them.
@@ -93,7 +93,9 @@ class TaurosPrivate:
             close_order = self.close_order(order_id=order_id)
             if not close_order["success"]:
                 error_msg = close_order["msg"]
-                logging.error(f"Close order with id {order_id} failed. Error: {error_msg}")
+                logging.error(
+                    f"Close order with id {order_id} failed. Error: {error_msg}"
+                )
                 continue
             orders_closed += 1
         logging.info(f"{orders_closed} limit orders closed!")

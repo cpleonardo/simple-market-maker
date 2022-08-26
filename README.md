@@ -1,7 +1,7 @@
 # Simple market maker
 Simple market maker bot
 
-This bot places limit orders in [tauros](https://tauros.io) crypto exchange querying [Bitso](https://bitso.com) orderbook as reference price.
+This bot places limit orders in [tauros](https://tauros.io) crypto exchange querying [Bitso](https://bitso.com) and [Okx](https://okx.com) orderbooks as reference price.
 
 ## Parameters
 

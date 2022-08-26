@@ -27,3 +27,14 @@ ORDER_PRICE_DELTA = 1  # Order price will be 1 MXN upper/lower than the best one
 USE_FIREBASE = os.environ.get("USE_FIREBASE") == "1"
 
 FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID")
+
+BITSO = "BITSO"
+OKX = "OKX"
+
+PRICE_SOURCE_RULES = {
+    "btc-mxn": BITSO,
+    "ltc-mxn": BITSO,
+    "eth-mxn": BITSO,
+    "bch-mxn": BITSO,
+    "btc-usdc": OKX,
+}
