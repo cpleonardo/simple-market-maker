@@ -16,55 +16,32 @@ is_production = settings.ENVIRONMENT == "prod"
 FIREBASE_BASE_URL = f"https://{settings.FIREBASE_PROJECT_ID}.firebaseio.com"
 
 if not tauros_key or not tauros_secret:
-    raise ValueError("Tauros credentials not fund")
+    exit("Tauros credentials not fund. Unable to launch bots.")
 
 tauros = TaurosPrivate(key=tauros_key, secret=tauros_secret, prod=is_production)
 
 tauros_public = TaurosPublic(prod=is_production)
 
 
-def close_all_orders():
-    """
-    This function queries all open orders in tauros and closes them.
-    """
-    open_orders = tauros.get_orders()
-    if not open_orders["success"]:
-        logging.error(f'Querying open orders fail. Error: {open_orders["msg"]}')
-        return
-
-    orders_ids = [order["order_id"] for order in open_orders["data"]]
-    logging.info(f"Open orders: {orders_ids}")
-    orders_closed = 0
-    for order_id in orders_ids:
-        logging.info(f"Closing order with id: {order_id}")
-        close_order = tauros.close_order(order_id=order_id)
-        if not close_order["success"]:
-            error_msg = close_order["msg"]
-            logging.error(f"Close order with id {order_id} failed. Error: {error_msg}")
-            continue
-        orders_closed += 1
-    logging.info(f"{orders_closed} limit orders closed!")
-
-
-def get_buy_order_price(max_price, ref_price, spread=None):
+def get_buy_order_price(max_price, ref_price, spread=None, greedy_mood=True):
     if spread is None:
         spread = settings.MIN_SPREAD
     max_price = max_price * Decimal(1 - spread / 100)
-    if ref_price > max_price:
+    if ref_price > max_price or not greedy_mood:
         return max_price
     return ref_price + settings.ORDER_PRICE_DELTA
 
 
-def get_sell_order_price(min_price, ref_price, spread=None):
+def get_sell_order_price(min_price, ref_price, spread=None, greedy_mood=True):
     if spread is None:
         spread = settings.MIN_SPREAD
     min_price = min_price * Decimal(1 + spread / 100)
-    if ref_price < min_price:
+    if ref_price < min_price or not greedy_mood:
         return min_price
     return ref_price - settings.ORDER_PRICE_DELTA
 
 
-def send_not_enough_balance_notification(
+def notify_not_enough_balance(
     left_coin_balance=None, right_coin_balance=None
 ):
     if right_coin_balance is None:
@@ -82,7 +59,7 @@ def send_not_enough_balance_notification(
     )
 
 
-def get_order_value(max_balance, price, max_order_value=200_00.00, side="buy"):
+def get_order_value(max_balance, price, max_order_value=20_000.00, side="buy"):
     # Setting order value
     MAX_ORDER_VALUE = Decimal(str(max_order_value))
 
@@ -113,6 +90,7 @@ def sell_bot(config_id, remote=False):
         market = config["market"]
         spread = config["spread"]
         time_to_sleep = config.get("refresh_rate") * 60 or settings.REFRESH_ORDER_RATE
+        greedy_mood = config.get("greedy_mood", True)
 
         if not config.get("is_active"):
             logging.info(
@@ -121,7 +99,7 @@ def sell_bot(config_id, remote=False):
             time.sleep(time_to_sleep)
             continue
 
-        left_coin, right_coin = market.split("-")
+        left_coin, _ = market.split("-")
         bitso_price = bitso_client.get_ask_price(market=market)
         tauros_price = tauros_public.get_ask_price(market=market)
 
@@ -133,8 +111,8 @@ def sell_bot(config_id, remote=False):
         left_coin_wallet = tauros.get_wallet(left_coin)
 
         if not left_coin_wallet["success"]:
-            logging.error(f"Tauros {left_coin} wallet query failed")
-            logging.error(left_coin_wallet["msg"])
+            error_msg = left_coin_wallet["msg"]
+            logging.error(f"Tauros {left_coin} wallet query failed. Error: {error_msg}")
             time.sleep(3)
             continue
 
@@ -144,7 +122,7 @@ def sell_bot(config_id, remote=False):
             logging.error(
                 f"{left_coin} wallet is empty. Imposible to place a buy order. Sending email . . ."
             )
-            send_not_enough_balance_notification(left_coin_balance=0)
+            notify_not_enough_balance(left_coin_balance=0)
             time.sleep(settings.NOT_FUNDS_AWAITING_TIME * 60)
             continue
 
@@ -152,7 +130,13 @@ def sell_bot(config_id, remote=False):
             min_price=bitso_price,
             ref_price=tauros_price,
             spread=spread,
+            greedy_mood=greedy_mood,
         )
+        if not greedy_mood:
+            tauros_bid_price = tauros_public.get_bid_price(market=market, ignore_below=0)
+            if order_price <= tauros_bid_price:
+                # TODO: Remove magic number
+                order_price = tauros_bid_price + Decimal('0.01')
 
         order_value = get_order_value(
             max_balance=left_coin_balance,
@@ -173,8 +157,7 @@ def sell_bot(config_id, remote=False):
         order_placed = tauros.place_order(order=order)
 
         if not order_placed["success"]:
-            error_msg = f"Could not place sell order in {market} market. Error: {order_placed['msg']}"
-            logging.error(error_msg)
+            logging.error(f"Could not place sell order in {market} market. Error: {order_placed['msg']}")
             messages = (
                 "The minimum order",
                 "has not enough {}".format(left_coin.upper()),
@@ -183,7 +166,7 @@ def sell_bot(config_id, remote=False):
             try:
                 for message in messages:
                     if message in order_placed["msg"][0]:
-                        send_not_enough_balance_notification()
+                        notify_not_enough_balance()
                         logging.error("Not enough funds email sent...")
                         time.sleep(settings.NOT_FUNDS_AWAITING_TIME * 60)
             except:
@@ -202,16 +185,17 @@ def sell_bot(config_id, remote=False):
         order_data = order_placed["data"]
         real_spread = (bitso_price - Decimal(order_data["price"])) / bitso_price
         real_spread = abs(round(real_spread * 100, 2))
-        logging.info(
-            f"DT: {order_data['created_at']} | Price: {order_data['price']} | Spread: {real_spread}% | Amount: {order_data['amount']} | Status: {order_data['status']}"
-        )
+        order_data["spread"] = str(real_spread) + "%"
+        logging.info(order_data)
         logging.info(f"Sleeping {time_to_sleep} seconds")
         time.sleep(time_to_sleep)
 
         close_order = tauros.close_order(order_id)
         if not close_order["success"]:
-            logging.info("Order close faild. Error", close_order["msg"])
-            close_all_orders()
+            logging.info(f"Order close faild. Error: {close_order['msg']}")
+            # Making a second attempt if nonce invalid
+            if "Provided nonce it is not valid." == close_order['msg']:
+                close_order = tauros.close_order(order_id)
 
 
 def buy_bot(config_id, remote=False):
@@ -233,6 +217,7 @@ def buy_bot(config_id, remote=False):
         market = config["market"]
         spread = config["spread"]
         time_to_sleep = config.get("refresh_rate") * 60 or settings.REFRESH_ORDER_RATE
+        greedy_mood = config.get("greedy_mood", True)
 
         if not config.get("is_active"):
             logging.info(
@@ -241,7 +226,7 @@ def buy_bot(config_id, remote=False):
             time.sleep(time_to_sleep)
             continue
 
-        left_coin, right_coin = market.split("-")
+        _, right_coin = market.split("-")
         bitso_price = bitso_client.get_bid_price(market=market)
         tauros_price = tauros_public.get_bid_price(market=market)
 
@@ -256,8 +241,8 @@ def buy_bot(config_id, remote=False):
         right_coin_wallet = tauros.get_wallet(right_coin)
 
         if not right_coin_wallet["success"]:
-            logging.error(f"Tauros {right_coin} wallet query failed")
-            logging.error(right_coin_wallet["msg"])
+            error_msg = right_coin_wallet["msg"]
+            logging.error(f"Tauros {right_coin} wallet query failed. Error: {error_msg}")
             time.sleep(3)
             continue
 
@@ -267,7 +252,7 @@ def buy_bot(config_id, remote=False):
             logging.error(
                 f"{right_coin} wallet is empty. Imposible to place a buy order. Sending email . . ."
             )
-            send_not_enough_balance_notification(right_coin_balance=0)
+            notify_not_enough_balance(right_coin_balance=0)
             time.sleep(settings.NOT_FUNDS_AWAITING_TIME * 60)
             continue
 
@@ -275,7 +260,13 @@ def buy_bot(config_id, remote=False):
             max_price=bitso_price,
             ref_price=tauros_price,
             spread=spread,
+            greedy_mood=greedy_mood,
         )
+        if not greedy_mood:
+            tauros_ask_price = tauros_public.get_ask_price(market=market, ignore_below=0)
+            if order_price >= tauros_ask_price:
+                # TODO: Remove magic number
+                order_price = tauros_ask_price - Decimal('0.01')
 
         order_value = get_order_value(
             max_balance=right_coin_balance,
@@ -306,7 +297,7 @@ def buy_bot(config_id, remote=False):
             try:
                 for message in messages:
                     if message in order_placed["msg"][0]:
-                        send_not_enough_balance_notification()
+                        notify_not_enough_balance()
                         logging.error("Not enough funds email sent...")
                         time.sleep(settings.NOT_FUNDS_AWAITING_TIME * 60)
             except:
@@ -323,21 +314,22 @@ def buy_bot(config_id, remote=False):
         order_data = order_placed["data"]
         real_spread = (bitso_price - Decimal(order_data["price"])) / bitso_price
         real_spread = abs(round(real_spread * 100, 2))
-        logging.info(
-            f"DT: {order_data['created_at']} | Price: {order_data['price']} | Spread: {real_spread}% | Amount: {order_data['amount']} | Status: {order_data['status']}"
-        )
+        order_data["spread"] = str(real_spread) + "%"
+        logging.info(order_data)
         logging.info(f"Sleeping {time_to_sleep} seconds")
         time.sleep(time_to_sleep)
 
         close_order = tauros.close_order(order_id)
         if not close_order["success"]:
-            logging.error("Order close failed")
-            logging.error(close_order["msg"])
+            logging.info(f"Order close faild. Error: {close_order['msg']}")
+            # Making a second attempt if nonce invalid
+            if "Provided nonce it is not valid." == close_order['msg']:
+                close_order = tauros.close_order(order_id)
 
 
 if __name__ == "__main__":
     logging.info(f"Environment: {'PRODUCTION' if is_production else 'STAGING'}")
-    close_all_orders()
+    tauros.close_all_orders()
     processes = []
 
     if not settings.USE_FIREBASE:
@@ -374,6 +366,6 @@ if __name__ == "__main__":
         for process in processes:
             process.join()
     except KeyboardInterrupt:
-        close_all_orders()
+        tauros.close_all_orders()
         for process in processes:
             process.terminate()
