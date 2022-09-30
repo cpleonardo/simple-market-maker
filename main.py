@@ -1,4 +1,9 @@
-from trading_bot.tauros_api import TaurosPrivate, TaurosPublic, OrderBook, format_orderbook
+from trading_bot.tauros_api import (
+    TaurosPrivate,
+    TaurosPublic,
+    OrderBook,
+    format_orderbook,
+)
 from trading_bot import notifications, price_source
 from decimal import Decimal
 import requests
@@ -23,6 +28,7 @@ tauros = TaurosPrivate(key=tauros_key, secret=tauros_secret, prod=is_production)
 tauros_public = TaurosPublic(prod=is_production)
 ORDERBOOK_SIZE = 20
 REMOTE_BOTS_LIMIT = 50
+
 
 def notify_not_enough_balance(left_coin_balance=None, right_coin_balance=None):
     if right_coin_balance is None:
@@ -308,12 +314,12 @@ def main():
             market = bot_config["market"].upper()
             if market not in orderbooks:
                 orderbooks[market] = {
-                    "asks_a": Array('d', ORDERBOOK_SIZE),
-                    "asks_v": Array('d', ORDERBOOK_SIZE),
-                    "asks_p": Array('d', ORDERBOOK_SIZE),
-                    "bids_a": Array('d', ORDERBOOK_SIZE),
-                    "bids_v": Array('d', ORDERBOOK_SIZE),
-                    "bids_p": Array('d', ORDERBOOK_SIZE),
+                    "asks_a": Array("d", ORDERBOOK_SIZE),
+                    "asks_v": Array("d", ORDERBOOK_SIZE),
+                    "asks_p": Array("d", ORDERBOOK_SIZE),
+                    "bids_a": Array("d", ORDERBOOK_SIZE),
+                    "bids_v": Array("d", ORDERBOOK_SIZE),
+                    "bids_p": Array("d", ORDERBOOK_SIZE),
                 }
             bots_processes.append(
                 Process(
@@ -332,18 +338,20 @@ def main():
             market = robot["market"].upper()
             if market not in orderbooks:
                 orderbooks[market] = {
-                    "asks_a": Array('d', ORDERBOOK_SIZE),
-                    "asks_v": Array('d', ORDERBOOK_SIZE),
-                    "asks_p": Array('d', ORDERBOOK_SIZE),
-                    "bids_a": Array('d', ORDERBOOK_SIZE),
-                    "bids_v": Array('d', ORDERBOOK_SIZE),
-                    "bids_p": Array('d', ORDERBOOK_SIZE),
+                    "asks_a": Array("d", ORDERBOOK_SIZE),
+                    "asks_v": Array("d", ORDERBOOK_SIZE),
+                    "asks_p": Array("d", ORDERBOOK_SIZE),
+                    "bids_a": Array("d", ORDERBOOK_SIZE),
+                    "bids_v": Array("d", ORDERBOOK_SIZE),
+                    "bids_p": Array("d", ORDERBOOK_SIZE),
                 }
-            bots_processes.append(Process(target=func, args=(i, orderbooks[market], True)))
+            bots_processes.append(
+                Process(target=func, args=(i, orderbooks[market], True))
+            )
 
     if not bots_processes:
         exit("No bots config defined")
-    
+
     ob_processes = []
     for market, orderbook_arr in orderbooks.items():
         orderbook_obj = OrderBook(market=market, orderbook=orderbook_arr)
@@ -356,7 +364,7 @@ def main():
 
     for process in bots_processes:
         process.start()
-    
+
     try:
         bots_processes[0].join()
     except KeyboardInterrupt:
@@ -372,7 +380,8 @@ def main():
         for ob_process in ob_processes:
             ob_process.terminate()
 
+
 if __name__ == "__main__":
-    env = 'PRODUCTION' if is_production else 'STAGING'
+    env = "PRODUCTION" if is_production else "STAGING"
     logging.info(f"Environment: {env}")
     main()

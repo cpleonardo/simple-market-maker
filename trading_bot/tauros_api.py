@@ -122,7 +122,9 @@ class TaurosPublic:
         path = f"/v2/trading/{market}/orderbook/"
         return self._request(path=path)
 
-    def get_ask_price(self, market="btc-mxn", ignore_below=Decimal("200.00"), orderbook=None):
+    def get_ask_price(
+        self, market="btc-mxn", ignore_below=Decimal("200.00"), orderbook=None
+    ):
         if orderbook is None:
             # Getting tauros order book
             tauros_order_book = self.get_order_book(market=market)
@@ -133,7 +135,9 @@ class TaurosPublic:
                 tauros_price = Decimal(str(ask["price"]))
                 return tauros_price
 
-    def get_bid_price(self, market="btc-mxn", ignore_below=Decimal("200.00"), orderbook=None):
+    def get_bid_price(
+        self, market="btc-mxn", ignore_below=Decimal("200.00"), orderbook=None
+    ):
         if orderbook is None:
             # Getting tauros order book
             tauros_order_book = self.get_order_book(market=market)
@@ -144,12 +148,10 @@ class TaurosPublic:
                 tauros_price = Decimal(str(bid["price"]))
                 return tauros_price
 
-class OrderBook():
 
+class OrderBook:
     def __init__(self, market, orderbook, prod=True):
-        self.ws_url = (
-            "wss://ws.tauros.io" if prod else "wss://ws-staging.tauros.io"
-        )
+        self.ws_url = "wss://ws.tauros.io" if prod else "wss://ws-staging.tauros.io"
         self.channel = "orderbook"
         self.market = market
         self.ws = websocket.WebSocketApp(
@@ -174,7 +176,7 @@ class OrderBook():
         }
         ws.send(json.dumps(message))
 
-    def on_message(self, ws, message):        
+    def on_message(self, ws, message):
         msg = json.loads(message)
         if msg.get("data") and self.orderbook:
             for index, item in enumerate(msg["data"]["asks"]):
@@ -186,11 +188,9 @@ class OrderBook():
                 self.orderbook["bids_v"][index] = Decimal(item["v"])
                 self.orderbook["bids_p"][index] = Decimal(item["p"])
 
+
 def format_orderbook(raw_orderbook):
-    orderbook = {
-        "asks": [],
-        "bids": []
-    }
+    orderbook = {"asks": [], "bids": []}
     for index, item in enumerate(raw_orderbook["asks_p"]):
         if item == 0:
             break
@@ -212,4 +212,3 @@ def format_orderbook(raw_orderbook):
             }
         )
     return orderbook
-
