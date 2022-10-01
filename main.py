@@ -1,4 +1,9 @@
-from trading_bot.tauros_api import TaurosPrivate, TaurosPublic
+from trading_bot.tauros_api import (
+    TaurosPrivate,
+    TaurosPublic,
+    OrderBook,
+    format_orderbook,
+)
 from trading_bot import notifications, price_source
 from decimal import Decimal
 import requests
@@ -6,7 +11,7 @@ import logging
 import settings
 import time
 import json
-from multiprocessing import Process
+from multiprocessing import Process, Array
 
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 
@@ -21,6 +26,8 @@ if not tauros_key or not tauros_secret:
 tauros = TaurosPrivate(key=tauros_key, secret=tauros_secret, prod=is_production)
 
 tauros_public = TaurosPublic(prod=is_production)
+ORDERBOOK_SIZE = 20
+REMOTE_BOTS_LIMIT = 50
 
 
 def notify_not_enough_balance(left_coin_balance=None, right_coin_balance=None):
@@ -39,7 +46,7 @@ def notify_not_enough_balance(left_coin_balance=None, right_coin_balance=None):
     )
 
 
-def sell_bot(config_id, remote=False):
+def sell_bot(config_id, raw_orderbook, remote=False):
     config = {}
     while True:
         if remote:
@@ -53,17 +60,18 @@ def sell_bot(config_id, remote=False):
         spread = config["spread"]
         time_to_sleep = config.get("refresh_rate") * 60 or settings.REFRESH_ORDER_RATE
         greedy_mood = config.get("greedy_mood", True)
+        orderbook = format_orderbook(raw_orderbook)
 
         if not config.get("is_active"):
             logging.info(
-                f"{market} bot is not active. Sleeping {time_to_sleep} seconds"
+                f"{market} SELL bot is not active. Sleeping {time_to_sleep} seconds"
             )
             time.sleep(time_to_sleep)
             continue
 
         left_coin, _ = market.split("-")
         external_price = price_source.get_external_price(market=market, ask=True)
-        tauros_price = tauros_public.get_ask_price(market=market)
+        tauros_price = tauros_public.get_ask_price(market=market, orderbook=orderbook)
 
         if not external_price or not tauros_price:
             logging.error("Bitso or Tauros query price failed")
@@ -96,7 +104,7 @@ def sell_bot(config_id, remote=False):
         )
         if not greedy_mood:
             tauros_bid_price = tauros_public.get_bid_price(
-                market=market, ignore_below=0
+                market=market, ignore_below=0, orderbook=orderbook
             )
             if order_price <= tauros_bid_price:
                 # TODO: Remove magic number
@@ -143,15 +151,13 @@ def sell_bot(config_id, remote=False):
 
         time_to_sleep = config.get("refresh_rate") * 60 or settings.REFRESH_ORDER_RATE
 
-        logging.info(f"Market: {market}. Side: SELL")
         logging.info(f"Tauros ask order price: {tauros_price}")
         logging.info(f"External ask order price: {external_price}")
-        logging.info("Sell order successfully placed: ")
         order_data = order_placed["data"]
         real_spread = (external_price - Decimal(order_data["price"])) / external_price
         real_spread = abs(round(real_spread * 100, 2))
         order_data["spread"] = str(real_spread) + "%"
-        logging.info(order_data)
+        logging.info(f"Sell order successfully placed: {order_data}")
         logging.info(f"Sleeping {time_to_sleep} seconds")
         time.sleep(time_to_sleep)
 
@@ -164,7 +170,7 @@ def sell_bot(config_id, remote=False):
                 close_order = tauros.close_order(order_id)
 
 
-def buy_bot(config_id, remote=False):
+def buy_bot(config_id, raw_orderbook, remote=False):
     config = {}
     while True:
         if remote:
@@ -184,17 +190,18 @@ def buy_bot(config_id, remote=False):
         spread = config["spread"]
         time_to_sleep = config.get("refresh_rate") * 60 or settings.REFRESH_ORDER_RATE
         greedy_mood = config.get("greedy_mood", True)
+        orderbook = format_orderbook(raw_orderbook)
 
         if not config.get("is_active"):
             logging.info(
-                f"{market} bot is not active. Sleeping {time_to_sleep} seconds"
+                f"{market} BUY bot is not active. Sleeping {time_to_sleep} seconds"
             )
             time.sleep(time_to_sleep)
             continue
 
         _, right_coin = market.split("-")
         external_price = price_source.get_external_price(market=market, ask=False)
-        tauros_price = tauros_public.get_bid_price(market=market)
+        tauros_price = tauros_public.get_bid_price(market=market, orderbook=orderbook)
 
         if not external_price or not tauros_price:
             TRY_AGAIN_IN = 3
@@ -232,7 +239,7 @@ def buy_bot(config_id, remote=False):
         )
         if not greedy_mood:
             tauros_ask_price = tauros_public.get_ask_price(
-                market=market, ignore_below=0
+                market=market, ignore_below=0, orderbook=orderbook
             )
             if order_price >= tauros_ask_price:
                 # TODO: Remove magic number
@@ -276,15 +283,13 @@ def buy_bot(config_id, remote=False):
 
         order_id = order_placed["data"]["id"]
 
-        logging.info(f"Market: {market}. Side: BUY")
         logging.info(f"Tauros bid order price: {tauros_price}")
         logging.info(f"External bid order price: {external_price}")
-        logging.info("Buy order successfully placed: ")
         order_data = order_placed["data"]
         real_spread = (external_price - Decimal(order_data["price"])) / external_price
         real_spread = abs(round(real_spread * 100, 2))
         order_data["spread"] = str(real_spread) + "%"
-        logging.info(order_data)
+        logging.info(f"Buy order successfully placed: {order_data}")
         logging.info(f"Sleeping {time_to_sleep} seconds")
         time.sleep(time_to_sleep)
 
@@ -297,45 +302,86 @@ def buy_bot(config_id, remote=False):
                 close_order = tauros.close_order(order_id)
 
 
-if __name__ == "__main__":
-    logging.info(f"Environment: {'PRODUCTION' if is_production else 'STAGING'}")
+def main():
     tauros.close_all_orders()
-    processes = []
-
+    bots_processes = []
+    orderbooks = {}
     if not settings.USE_FIREBASE:
         logging.info("Using robots.json file...")
         with open("./robots.json") as bots_config:
             robots_config = json.load(bots_config)
         for index, bot_config in enumerate(robots_config):
-            processes.append(
+            market = bot_config["market"].upper()
+            if market not in orderbooks:
+                orderbooks[market] = {
+                    "asks_a": Array("d", ORDERBOOK_SIZE),
+                    "asks_v": Array("d", ORDERBOOK_SIZE),
+                    "asks_p": Array("d", ORDERBOOK_SIZE),
+                    "bids_a": Array("d", ORDERBOOK_SIZE),
+                    "bids_v": Array("d", ORDERBOOK_SIZE),
+                    "bids_p": Array("d", ORDERBOOK_SIZE),
+                }
+            bots_processes.append(
                 Process(
                     target=buy_bot if bot_config["side"] == "buy" else sell_bot,
-                    args=(index, False),
+                    args=(index, orderbooks[market], False),
                 )
             )
     else:
-        LIMIT = 50
-        logging.info(f"Using firebase with up to {LIMIT} bots")
-        for i in range(0, LIMIT - 1):
+        logging.info(f"Using firebase with up to {REMOTE_BOTS_LIMIT} bots")
+        for i in range(0, REMOTE_BOTS_LIMIT - 1):
             response = requests.get(f"{FIREBASE_BASE_URL}/{i}.json")
             robot = response.json()
             if not robot:
                 break
-            processes.append(
-                Process(
-                    target=buy_bot if robot["side"] == "buy" else sell_bot,
-                    args=(i, True),
-                )
+            func = buy_bot if robot["side"] == "buy" else sell_bot
+            market = robot["market"].upper()
+            if market not in orderbooks:
+                orderbooks[market] = {
+                    "asks_a": Array("d", ORDERBOOK_SIZE),
+                    "asks_v": Array("d", ORDERBOOK_SIZE),
+                    "asks_p": Array("d", ORDERBOOK_SIZE),
+                    "bids_a": Array("d", ORDERBOOK_SIZE),
+                    "bids_v": Array("d", ORDERBOOK_SIZE),
+                    "bids_p": Array("d", ORDERBOOK_SIZE),
+                }
+            bots_processes.append(
+                Process(target=func, args=(i, orderbooks[market], True))
             )
-    if not processes:
+
+    if not bots_processes:
         exit("No bots config defined")
+
+    ob_processes = []
+    for market, orderbook_arr in orderbooks.items():
+        orderbook_obj = OrderBook(market=market, orderbook=orderbook_arr)
+        process = Process(target=orderbook_obj.connect)
+        ob_processes.append(process)
+        process.start()
+
+    # Awaiting to receive websocket stream
+    time.sleep(3)
+
+    for process in bots_processes:
+        process.start()
+
     try:
-        for process in processes:
-            time.sleep(0.1)
-            process.start()
-        for process in processes:
-            process.join()
+        bots_processes[0].join()
     except KeyboardInterrupt:
+
+        # Close all open orders
         tauros.close_all_orders()
-        for process in processes:
-            process.terminate()
+
+        # Terminate bots processes
+        for bot_process in bots_processes:
+            bot_process.terminate()
+
+        # Terminate orderbook processes
+        for ob_process in ob_processes:
+            ob_process.terminate()
+
+
+if __name__ == "__main__":
+    env = "PRODUCTION" if is_production else "STAGING"
+    logging.info(f"Environment: {env}")
+    main()

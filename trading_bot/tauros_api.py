@@ -7,6 +7,8 @@ import hashlib
 import base64
 import simplejson
 from decimal import Decimal
+import websocket
+import ssl
 
 
 class TaurosPrivate:
@@ -120,20 +122,93 @@ class TaurosPublic:
         path = f"/v2/trading/{market}/orderbook/"
         return self._request(path=path)
 
-    def get_ask_price(self, market="btc-mxn", ignore_below=Decimal("200.00")):
-        # Getting tauros order book
-        tauros_order_book = self.get_order_book(market=market)
+    def get_ask_price(
+        self, market="btc-mxn", ignore_below=Decimal("200.00"), orderbook=None
+    ):
+        if orderbook is None:
+            # Getting tauros order book
+            tauros_order_book = self.get_order_book(market=market)
+            orderbook = tauros_order_book["payload"]
         tauros_price = None
-        for ask in tauros_order_book["payload"]["asks"]:
+        for ask in orderbook["asks"]:
             if Decimal(str(ask["value"])) > ignore_below:
                 tauros_price = Decimal(str(ask["price"]))
                 return tauros_price
 
-    def get_bid_price(self, market="btc-mxn", ignore_below=Decimal("200.00")):
-        # Getting tauros order book
-        tauros_order_book = self.get_order_book(market=market)
+    def get_bid_price(
+        self, market="btc-mxn", ignore_below=Decimal("200.00"), orderbook=None
+    ):
+        if orderbook is None:
+            # Getting tauros order book
+            tauros_order_book = self.get_order_book(market=market)
+            orderbook = tauros_order_book["payload"]
         tauros_price = None
-        for bid in tauros_order_book["payload"]["bids"]:
+        for bid in orderbook["bids"]:
             if Decimal(str(bid["value"])) > ignore_below:
                 tauros_price = Decimal(str(bid["price"]))
                 return tauros_price
+
+
+class OrderBook:
+    def __init__(self, market, orderbook, prod=True):
+        self.ws_url = "wss://ws.tauros.io" if prod else "wss://ws-staging.tauros.io"
+        self.channel = "orderbook"
+        self.market = market
+        self.ws = websocket.WebSocketApp(
+            self.ws_url,
+            on_open=self.on_open,
+            on_message=self.on_message,
+        )
+        self.orderbook = orderbook
+
+    def connect(self):
+        self.ws.run_forever(
+            ping_interval=20,
+            ping_timeout=10,
+            sslopt={"cert_reqs": ssl.CERT_NONE},
+        )
+
+    def on_open(self, ws):
+        message = {
+            "action": "subscribe",
+            "market": self.market,
+            "channel": self.channel,
+        }
+        ws.send(json.dumps(message))
+
+    def on_message(self, ws, message):
+        msg = json.loads(message)
+        if msg.get("data") and self.orderbook:
+            for index, item in enumerate(msg["data"]["asks"]):
+                self.orderbook["asks_a"][index] = Decimal(item["a"])
+                self.orderbook["asks_v"][index] = Decimal(item["v"])
+                self.orderbook["asks_p"][index] = Decimal(item["p"])
+            for index, item in enumerate(msg["data"]["bids"]):
+                self.orderbook["bids_a"][index] = Decimal(item["a"])
+                self.orderbook["bids_v"][index] = Decimal(item["v"])
+                self.orderbook["bids_p"][index] = Decimal(item["p"])
+
+
+def format_orderbook(raw_orderbook):
+    orderbook = {"asks": [], "bids": []}
+    for index, item in enumerate(raw_orderbook["asks_p"]):
+        if item == 0:
+            break
+        orderbook["asks"].append(
+            {
+                "price": item,
+                "amount": raw_orderbook["asks_a"][index],
+                "value": raw_orderbook["asks_v"][index],
+            }
+        )
+    for index, item in enumerate(raw_orderbook["bids_p"]):
+        if item == 0:
+            break
+        orderbook["bids"].append(
+            {
+                "price": item,
+                "aamount": raw_orderbook["bids_a"][index],
+                "value": raw_orderbook["bids_v"][index],
+            }
+        )
+    return orderbook
