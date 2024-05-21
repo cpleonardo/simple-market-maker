@@ -1,5 +1,5 @@
 bitso-py==3.0.1
-requests==2.31.0
+requests==2.32.0
 tauros-api==1.5.1
 python-dotenv==0.14.0
 simplejson==3.17.2
